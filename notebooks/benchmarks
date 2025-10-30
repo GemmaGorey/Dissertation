@@ -1,0 +1,73 @@
+# Goal 1: Computational Capability Assessment
+
+This document summarizes the performance of the local and cloud platforms.
+
+### Platform Specifications
+* **Local:** MacBook Air/Pro (CPU)
+* **Cloud:** Google Colab (NVIDIA T4 GPU)
+
+### Benchmark Results
+
+| Task                      | Local Mac (CPU) Time | Colab (GPU) Time |
+| ------------------------- | -------------------- | ---------------- |
+| Audio Processing (Librosa)| ~22.18s              | ~15.94s          |
+| Audio Processing (Torchaudio)| ~0.05s               | ~0.76s           |
+| CNN Training (10 epochs)  | 2.92s                | 1.20s            |
+
+
+"Based on the benchmark results, model training is significantly faster on the Colab GPU. 
+Therefore, the chosen workflow will be hybrid: code development and small-scale data tasks will be performed locally, 
+while all model training and evaluation will be performed on Google Colab to leverage GPU acceleration."
+
+
+###############Output from local#######################
+
+Torchaudio (cpu) processing time: 0.0528 seconds
+
+--- Benchmark Complete ---
+(dissertation) student@Gemma-Gorey Dissertation % cd scripts 
+(dissertation) student@Gemma-Gorey scripts % ls
+audio_benchmark.py	cnn_benchmark.py	README
+(dissertation) student@Gemma-Gorey scripts % python cnn_benchmark.py
+--- CNN Training Loop Benchmark ---
+Benchmark will use device: cpu
+Simulated data shape: torch.Size([32, 1, 128, 431])
+
+Model loaded onto cpu.
+Starting training loop for 10 epochs...
+Epoch [1/10], Loss: 1.4036
+Epoch [2/10], Loss: 19.2757
+Epoch [3/10], Loss: 23.9377
+Epoch [4/10], Loss: 11.8848
+Epoch [5/10], Loss: 3.4313
+Epoch [6/10], Loss: 2.1566
+Epoch [7/10], Loss: 1.7253
+Epoch [8/10], Loss: 1.3554
+Epoch [9/10], Loss: 0.5527
+Epoch [10/10], Loss: 0.2643
+
+--- Benchmark Complete ---
+Total training time for 10 epochs on cpu: 2.92 seconds
+
+####################output from colab#####################
+
+--- CNN Training Loop Benchmark ---
+Benchmark will use device: cuda
+Simulated data shape: torch.Size([32, 1, 128, 431])
+
+Model loaded onto cuda.
+Starting training loop for 10 epochs...
+Epoch [1/10], Loss: 1.4453
+Epoch [2/10], Loss: 30.1388
+Epoch [3/10], Loss: 8.8652
+Epoch [4/10], Loss: 9.0162
+Epoch [5/10], Loss: 13.1328
+Epoch [6/10], Loss: 9.9128
+Epoch [7/10], Loss: 8.0377
+Epoch [8/10], Loss: 4.3783
+Epoch [9/10], Loss: 2.3709
+Epoch [10/10], Loss: 0.8175
+
+--- Benchmark Complete ---
+Total training time for 10 epochs on cuda: 1.20 seconds
+

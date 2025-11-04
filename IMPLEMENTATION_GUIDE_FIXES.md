@@ -7,21 +7,41 @@
 
 ## 📋 TODO LIST
 
-### 🔴 PHASE 1: CRITICAL PREPROCESSING FIXES (DO FIRST!)
+### 🎯 QUICK SUMMARY - WHAT'S LEFT TO DO:
 
-- [x] **Task 1.1:** ✅ COMPLETED - Created `Audio_Processing_V2_Dissertation_GG.ipynb` with global max normalization approach
-- [ ] **Task 1.2:** Fix syntax error in `load_song_data()` (cell-14: `np.GLOBAL_MAX_REF` → `GLOBAL_MAX_REF`)
-- [ ] **Task 1.3:** Decide on normalization approach (global max vs ref=1.0)
-- [ ] **Task 1.4:** Verify the fix by testing on one song (check dB ranges)
-- [ ] **Task 1.5:** Reprocess ALL spectrograms with corrected code (cell-16)
-- [ ] **Task 1.6:** Verify reprocessed data looks correct
+**PHASE 1: ✅ COMPLETE** - All preprocessing fixes done, all 2216 spectrograms reprocessed
 
-**Estimated time:** 2-3 hours (depending on dataset size)
+**PHASE 2: ⏳ TODO** - Update model architectures (MODEL_3, 4, 5) with SE-Attention
+- Replace attention mechanism in 3 notebooks
+- Estimated time: 30-45 minutes
 
-**Notes:**
-- V2 notebook uses global max normalization (ref=GLOBAL_MAX_REF) for dataset-wide consistency
-- Decision made: NOT using middle-of-song approach (songs ~30s, will revisit if evidence suggests it's needed)
-- Padding value correctly set to -80 dB (silence) ✅
+**PHASE 3: ⏳ TODO** - Add training improvements (gradient clipping, epoch tracking)
+- Small edits to training loops in 3 notebooks
+- Estimated time: 15-20 minutes
+
+**PHASE 4: ⏳ TODO** - Retrain all models and evaluate improvements
+- Run training for MODEL_3, 4, 5 with fixed data
+- Estimated time: Several hours (training time)
+
+---
+
+### ✅ PHASE 1: CRITICAL PREPROCESSING FIXES - **COMPLETED!**
+
+- [x] **Task 1.1:** ✅ Created `Audio_Processing_V2_Dissertation_GG.ipynb`
+- [x] **Task 1.2:** ✅ Fixed `load_song_data()` - using `ref=1.0` (standard approach)
+- [x] **Task 1.3:** ✅ Decided on normalization: `ref=1.0` (well-established, preserves absolute loudness)
+- [x] **Task 1.4:** ✅ Verified fix - spectrograms checked and look good
+- [x] **Task 1.5:** ✅ Reprocessed ALL 2216 spectrograms (cell 18 completed)
+- [x] **Task 1.6:** ✅ Verified reprocessed data (cell 19 shows correct shapes and paths)
+
+**Status:** ALL PREPROCESSING FIXES COMPLETE ✅
+
+**What was fixed:**
+- ✅ `ref=1.0` in power_to_db (consistent normalization across all songs)
+- ✅ `constant_values=-80.0` for padding (silence, not artificial loudness)
+- ✅ First segment truncation (appropriate for ~30s songs)
+- ✅ All 2216 songs processed and saved successfully
+- ✅ Spectrograms verified visually - all look correct
 
 ### 🟡 PHASE 2: MODEL ARCHITECTURE UPGRADES (DO SECOND)
 

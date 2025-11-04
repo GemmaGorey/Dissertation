@@ -9,12 +9,19 @@
 
 ### 🔴 PHASE 1: CRITICAL PREPROCESSING FIXES (DO FIRST!)
 
-- [ ] **Task 1.1:** Fix `load_song_data()` function in `Dissertation_GG.ipynb` (cell-10)
-- [ ] **Task 1.2:** Verify the fix by testing on one song
-- [ ] **Task 1.3:** Reprocess ALL spectrograms with fixed code (cell-12)
-- [ ] **Task 1.4:** Verify reprocessed data looks correct
+- [x] **Task 1.1:** ✅ COMPLETED - Created `Audio_Processing_V2_Dissertation_GG.ipynb` with global max normalization approach
+- [ ] **Task 1.2:** Fix syntax error in `load_song_data()` (cell-14: `np.GLOBAL_MAX_REF` → `GLOBAL_MAX_REF`)
+- [ ] **Task 1.3:** Decide on normalization approach (global max vs ref=1.0)
+- [ ] **Task 1.4:** Verify the fix by testing on one song (check dB ranges)
+- [ ] **Task 1.5:** Reprocess ALL spectrograms with corrected code (cell-16)
+- [ ] **Task 1.6:** Verify reprocessed data looks correct
 
 **Estimated time:** 2-3 hours (depending on dataset size)
+
+**Notes:**
+- V2 notebook uses global max normalization (ref=GLOBAL_MAX_REF) for dataset-wide consistency
+- Decision made: NOT using middle-of-song approach (songs ~30s, will revisit if evidence suggests it's needed)
+- Padding value correctly set to -80 dB (silence) ✅
 
 ### 🟡 PHASE 2: MODEL ARCHITECTURE UPGRADES (DO SECOND)
 
@@ -663,6 +670,141 @@ Document these changes as:
 - Improved truncation strategy to use middle segments
 
 Compare before/after results in a table.
+
+---
+
+## 🆕 AUDIO PROCESSING V2 UPDATES (2025-11-04)
+
+### New Notebook: `Audio_Processing_V2_Dissertation_GG.ipynb`
+
+This notebook implements a **global max normalization approach** as an alternative to the per-spectrogram normalization in the original implementation guide.
+
+### ✅ What's Been Implemented
+
+1. **Global Max Power Calculation** (cells 10-13)
+   - Computes single maximum power value across ALL spectrograms: `GLOBAL_MAX = 13400.846`
+   - Used for dataset-wide normalization consistency
+   - Function: `find_global_max_power(dataframe, base_audio_path)`
+
+2. **Design Decision: Full Song Processing**
+   - **NOT using middle-of-song truncation** (disagreed that middle = most emotional)
+   - Songs are ~30 seconds, so using full duration
+   - Will revisit if evidence shows middle segment affects results
+   - Can conduct outlier analysis later to investigate
+
+3. **Correct Padding Implementation** ✅
+   - Already using `-80 dB` for silence padding (correct!)
+   - `constant_values=-80.0` in cell-14
+
+### ⚠️ Issues Found and Fixes Needed
+
+#### **Issue 1: Syntax Error in cell-14** (line ~58)
+
+**Current (WRONG):**
+```python
+db_spectrogram = librosa.power_to_db(mel_spectrogram, ref=np.GLOBAL_MAX_REF)
+```
+
+**Fixed:**
+```python
+# Option A: Fix syntax and keep global max approach
+db_spectrogram = librosa.power_to_db(mel_spectrogram, ref=GLOBAL_MAX_REF)
+
+# Option B: Use standard reference (simpler, well-established)
+db_spectrogram = librosa.power_to_db(mel_spectrogram, ref=1.0)
+
+# Option C: Per-song normalization (loses absolute loudness info)
+db_spectrogram = librosa.power_to_db(mel_spectrogram, ref=np.max(mel_spectrogram))
+```
+
+#### **Issue 2: Understanding "Very Large Unexpected Numbers"**
+
+The large negative values you're seeing are **mathematically correct** for global max normalization:
+
+**Why this happens:**
+- Global max = loudest moment in entire dataset (13400.846)
+- All other moments are quieter → negative dB values
+- Formula: `dB = 10 * log10(power / ref)`
+- Example: If power = 100, then `10 * log10(100 / 13400.846) = -21.3 dB`
+
+**Expected dB ranges:**
+- Global max approach: **-100 to 0 dB** (most values -40 to -80)
+- Standard ref=1.0: **-80 to 0 dB** (typical range)
+- Per-song max: **-80 to 0 dB** (each song's max = 0)
+
+**This is NOT a bug!** CNNs can learn from any consistent scale.
+
+### 🎯 Recommended Action
+
+**Choice 1: Global Max (Original Intent)**
+```python
+# cell-14, line ~58
+db_spectrogram = librosa.power_to_db(mel_spectrogram, ref=GLOBAL_MAX_REF)  # Fixed syntax
+```
+- ✅ Preserves relative loudness across dataset
+- ✅ Consistent normalization
+- ✅ Good for arousal prediction (loudness matters!)
+- ⚠️ Large negative values (but not a problem for CNNs)
+
+**Choice 2: Standard Reference (Simpler)**
+```python
+# cell-14, line ~58
+db_spectrogram = librosa.power_to_db(mel_spectrogram, ref=1.0)
+```
+- ✅ More typical dB ranges
+- ✅ Well-established in literature
+- ✅ Still preserves absolute loudness
+- ✅ Easier to interpret
+
+**Recommendation:** Either is fine! Choose **global max** if you want explicit dataset-wide consistency, or **ref=1.0** for simplicity.
+
+### 📝 Testing After Fix
+
+Add this verification code after the conversion (cell-14 or cell-15):
+
+```python
+# Verify dB values are reasonable
+print(f"dB range: {db_spectrogram.min():.2f} to {db_spectrogram.max():.2f} dB")
+print(f"dB mean: {db_spectrogram.mean():.2f} dB")
+
+# Check for any unexpected values
+if db_spectrogram.max() > 5:
+    print("⚠️ Warning: Unexpectedly high dB values")
+if db_spectrogram.min() < -120:
+    print("⚠️ Warning: Unexpectedly low dB values")
+
+# Visualize the distribution
+import matplotlib.pyplot as plt
+plt.figure(figsize=(10, 4))
+plt.hist(db_spectrogram.flatten(), bins=100, alpha=0.7)
+plt.xlabel('dB Value')
+plt.ylabel('Frequency')
+plt.title('Distribution of dB Values in Spectrogram')
+plt.axvline(x=-80, color='r', linestyle='--', label='Padding value')
+plt.legend()
+plt.show()
+```
+
+### 🔄 Next Steps After Fixing cell-14
+
+1. **Test on one song** (run cell-15 with verification code above)
+2. **If dB ranges look good** (-100 to 0 or -80 to 0), proceed to reprocess
+3. **Reprocess all songs** (run cell-16) - THIS WILL TAKE TIME
+4. **Verify saved data** (run cell-17)
+5. **Proceed to Phase 2** (Model architecture upgrades)
+
+### 📊 Comparison: Original vs V2 Approach
+
+| Aspect | Original (Implementation Guide) | V2 (Your Notebook) |
+|--------|--------------------------------|-------------------|
+| **Normalization** | ref=1.0 (standard) | ref=GLOBAL_MAX (dataset-wide) |
+| **Truncation** | Middle segment | Full song (start to end) |
+| **Padding** | -80 dB ✅ | -80 dB ✅ |
+| **dB Range** | ~-80 to 0 | ~-100 to 0 |
+| **Pros** | Simpler, standard | Consistent cross-dataset |
+| **Cons** | None | Large negative values (cosmetic) |
+
+Both approaches are valid! The V2 approach is more sophisticated if you want dataset-wide loudness consistency.
 
 ---
 

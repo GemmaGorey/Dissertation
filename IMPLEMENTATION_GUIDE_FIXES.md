@@ -50,13 +50,28 @@
   - Displays all 2216 spectrograms in 6×4 grids
   - User confirmed: **all spectrograms look OK!**
 
-### 🟡 PHASE 2: MODEL ARCHITECTURE UPGRADES (DO SECOND)
+### 🟡 PHASE 2: MOVE ATTENTION EARLIER (OPTIONAL BUT RECOMMENDED)
 
-- [ ] **Task 2.1:** Add `SEAttention` class to MODEL_3, 4, 5 (cell-5)
-- [ ] **Task 2.2:** Update `VGGish_Audio_Model` in MODEL_3, 4, 5 (cell-6)
-- [ ] **Task 2.3:** Verify model architecture loads correctly
+**What:** Move existing AttentionModule earlier in the network (before final classifier)
 
-**Estimated time:** 30 minutes
+**Why:** Attention will learn which of the 512 CNN features are important (richer representation) instead of which of the 64 final features are important (compressed representation)
+
+**Tasks:**
+- [ ] **Task 2.1:** Update `VGGish_Audio_Model` in MODEL_3 (cell-6)
+  - Change `AttentionModule(64)` → `AttentionModule(512)`
+  - Move `self.attention(x)` to BEFORE classifier in forward()
+- [ ] **Task 2.2:** Update `VGGish_Audio_Model` in MODEL_4 (cell-6)
+  - Same changes (keep 2 conv layers per block)
+- [ ] **Task 2.3:** Update `VGGish_Audio_Model` in MODEL_5 (cell-6)
+  - Same changes
+- [ ] **Task 2.4:** Verify model loads with test code
+
+**Estimated time:** 15-20 minutes (2 simple changes per notebook × 3 notebooks)
+
+**What stays the same:**
+- ✅ Cell-5 (AttentionModule) - NO CHANGES NEEDED!
+- ✅ Your CNN architecture
+- ✅ Your classifier structure
 
 ### 🟢 PHASE 3: TRAINING IMPROVEMENTS (DO THIRD)
 
@@ -224,122 +239,87 @@ if spectrogram is not None:
 
 ---
 
-## 🟡 PHASE 2: SE-ATTENTION IMPLEMENTATION
+## 🟡 PHASE 2: MOVE ATTENTION EARLIER IN THE NETWORK
 
 ### Files to Edit: MODEL_3, MODEL_4, MODEL_5 notebooks
 
+**What we're doing:** Moving your existing AttentionModule to operate on 512-dimensional features (after CNN, before classifier) instead of 64-dimensional features (after classifier).
+
+**Why:** Attention will learn which of the 512 CNN features are important, rather than which of the 64 final features. This gives the network more capacity to focus on important patterns.
+
 ---
 
-### STEP 1: Replace cell-5 (AttentionModule) with SEAttention
+### OPTION A: Simple Placement Change (RECOMMENDED)
+
+This keeps your existing `AttentionModule` unchanged, just moves where it's applied.
+
+### STEP 1: Keep cell-5 - AttentionModule stays the same!
 
 **File:** `MODEL_3_Dissertation_model_training_basic_VGGish.ipynb`
 **Cell:** cell-5
 
-**BEFORE (old AttentionModule):**
+**NO CHANGES NEEDED** - Your AttentionModule is fine as-is:
+
 ```python
 class AttentionModule(nn.Module):
     def __init__(self, feature_dim):
         super(AttentionModule, self).__init__()
+        '''
+        Attention mechanism to weight the importance of different features
+        '''
         self.attention = nn.Sequential(
-            nn.Linear(feature_dim, feature_dim // 4),
+            nn.Linear(feature_dim, feature_dim // 4),  # e.g., 512 → 128
             nn.ReLU(),
-            nn.Linear(feature_dim // 4, feature_dim),
+            nn.Linear(feature_dim // 4, feature_dim),  # e.g., 128 → 512
             nn.Sigmoid()
         )
 
     def forward(self, x):
-        attention_weights = self.attention(x)
-        weighted_features = x * attention_weights
+        # x shape: [batch_size, feature_dim]
+        attention_weights = self.attention(x)  # [batch_size, feature_dim]
+        weighted_features = x * attention_weights  # Element-wise multiplication
         return weighted_features
 ```
 
-**AFTER (new SEAttention) - REPLACE ENTIRE CELL:**
-
-```python
-class SEAttention(nn.Module):
-    """
-    Squeeze-and-Excitation (SE) Channel Attention Block
-
-    This module performs channel-wise attention on CNN feature maps.
-    It learns to re-weight channels based on global information,
-    allowing the network to focus on the most important features.
-
-    Reference: "Squeeze-and-Excitation Networks" (Hu et al., 2018)
-
-    Args:
-        channel_dim: Number of channels in the input feature map
-        reduction_ratio: Reduction factor for the bottleneck (default: 16)
-
-    Input shape: [batch_size, channel_dim, height, width]
-    Output shape: [batch_size, channel_dim, height, width] (same as input)
-    """
-    def __init__(self, channel_dim, reduction_ratio=16):
-        super(SEAttention, self).__init__()
-
-        # Squeeze: Global Average Pooling (spatial dimensions -> 1x1)
-        self.squeeze = nn.AdaptiveAvgPool2d(1)
-
-        # Excitation: Two-layer MLP with bottleneck
-        self.excitation = nn.Sequential(
-            nn.Linear(channel_dim, channel_dim // reduction_ratio, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Linear(channel_dim // reduction_ratio, channel_dim, bias=False),
-            nn.Sigmoid()  # Output values between 0 and 1 (channel weights)
-        )
-
-    def forward(self, x):
-        """
-        Forward pass of SE block
-
-        Args:
-            x: Input feature map [B, C, H, W]
-
-        Returns:
-            Attention-weighted feature map [B, C, H, W]
-        """
-        # Get dimensions
-        batch_size, channels, _, _ = x.shape
-
-        # Squeeze: [B, C, H, W] -> [B, C, 1, 1]
-        # This captures global information from each channel
-        squeezed = self.squeeze(x)
-
-        # Flatten for MLP: [B, C, 1, 1] -> [B, C]
-        squeezed = squeezed.view(batch_size, channels)
-
-        # Excitation: [B, C] -> [B, C]
-        # Learns the importance weight for each channel
-        channel_weights = self.excitation(squeezed)
-
-        # Reshape for broadcasting: [B, C] -> [B, C, 1, 1]
-        channel_weights = channel_weights.view(batch_size, channels, 1, 1)
-
-        # Apply channel weights: [B, C, H, W] * [B, C, 1, 1] -> [B, C, H, W]
-        # Each channel is scaled by its learned weight
-        return x * channel_weights.expand_as(x)
-```
-
-**Repeat this for MODEL_4 and MODEL_5 (same code)**
+✅ This code works for any `feature_dim` (64, 512, etc.), so no changes needed!
 
 ---
 
-### STEP 2: Update VGGish_Audio_Model (cell-6)
+### STEP 2: Update cell-6 - VGGish_Audio_Model (Move Attention Earlier)
 
 **File:** `MODEL_3_Dissertation_model_training_basic_VGGish.ipynb`
 **Cell:** cell-6
 
-**BEFORE:**
+**CURRENT CODE (attention applied on 64-dim features):**
 ```python
 class VGGish_Audio_Model(nn.Module):
     def __init__(self):
         super(VGGish_Audio_Model, self).__init__()
 
         self.features = nn.Sequential(
-            # ... conv blocks ...
+            # Block 1
+            nn.Conv2d(1, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            # Block 2
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            # Block 3
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            # Block 4
             nn.Conv2d(256, 512, kernel_size=3, padding=1),
             nn.BatchNorm2d(512),
             nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool2d((1, 1))  # ❌ Attention should be BEFORE this
+            nn.AdaptiveAvgPool2d((1, 1))
         )
 
         self.classifier = nn.Sequential(
@@ -350,159 +330,131 @@ class VGGish_Audio_Model(nn.Module):
             nn.Linear(256, 64)
         )
 
-        self.attention = AttentionModule(64)  # ❌ Too late!
+        self.attention = AttentionModule(64)  # ❌ Operates on 64 dims
 
     def forward(self, x):
         x = self.features(x)
         x = x.view(x.size(0), -1)
-        x = self.classifier(x)
-        x = self.attention(x)  # ❌ Applied after everything
+        x = self.classifier(x)       # [B, 512] → [B, 64]
+        x = self.attention(x)        # ❌ Attention on 64 dims (after classifier)
         return x
 ```
 
-**AFTER - REPLACE ENTIRE CELL:**
+**NEW CODE (attention applied on 512-dim features - COPY THIS):**
 
 ```python
 class VGGish_Audio_Model(nn.Module):
-    """
-    VGG-style CNN for audio feature extraction with SE-Attention
-
-    V2.0 Changes:
-    - Moved attention from final features to feature maps (before pooling)
-    - Now uses SEAttention instead of simple feature-level attention
-    - Attention can now learn spatial importance in spectrograms
-
-    Architecture:
-    - 4 convolutional blocks with increasing channels (64 -> 128 -> 256 -> 512)
-    - Batch normalization after each conv
-    - Max pooling after blocks 1-3
-    - SE-Attention after block 4 (before adaptive pooling)
-    - Adaptive average pooling to [B, 512, 1, 1]
-    - MLP classifier: 512 -> 256 -> 64
-
-    Input: [batch_size, 1, 128, 1292] (mel spectrogram)
-    Output: [batch_size, 64] (audio feature vector)
-    """
+    '''VGG-style model with attention moved earlier
+      - Attention now operates on 512-dim features (after CNN pooling, before classifier)
+      - This allows attention to learn feature importance at a richer representation level
+    '''
 
     def __init__(self):
         super(VGGish_Audio_Model, self).__init__()
 
         self.features = nn.Sequential(
-            # Block 1: 1 -> 64 channels
+            # Block 1
             nn.Conv2d(1, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
 
-            # Block 2: 64 -> 128 channels
+            # Block 2
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
 
-            # Block 3: 128 -> 256 channels
+            # Block 3
             nn.Conv2d(128, 256, kernel_size=3, padding=1),
             nn.BatchNorm2d(256),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
 
-            # Block 4: 256 -> 512 channels
+            # Block 4
             nn.Conv2d(256, 512, kernel_size=3, padding=1),
             nn.BatchNorm2d(512),
             nn.ReLU(inplace=True),
-
-            # ✅ SE-ATTENTION APPLIED HERE (before pooling)
-            # Operates on [B, 512, H, W] feature maps
-            # Learns which channels (feature types) are most important
-            SEAttention(channel_dim=512, reduction_ratio=16),
-
-            # Now pool the attention-weighted features
-            nn.AdaptiveAvgPool2d((1, 1))  # [B, 512, H, W] -> [B, 512, 1, 1]
+            nn.AdaptiveAvgPool2d((1, 1))  # Pool to [B, 512, 1, 1]
         )
+
+        # ✅ MOVED: Attention now operates on 512 dimensions
+        self.attention = AttentionModule(512)
 
         self.classifier = nn.Sequential(
             nn.Dropout(0.5),
             nn.Linear(512, 256),
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
-            nn.Linear(256, 64)  # Output: 64-dim audio features
+            nn.Linear(256, 64)  # Final feature vector size should be 64
         )
 
-        # ✅ REMOVED: self.attention = AttentionModule(64)
-        # Attention is now part of self.features
-
     def forward(self, x):
-        """
-        Forward pass
-
-        Args:
-            x: [batch_size, 1, 128, 1292] spectrogram
-
-        Returns:
-            [batch_size, 64] audio feature vector
-        """
-        # CNN + SE-Attention: [B, 1, 128, 1292] -> [B, 512, 1, 1]
+        # CNN feature extraction: [B, 1, 128, 1292] → [B, 512, 1, 1]
         x = self.features(x)
 
-        # Flatten: [B, 512, 1, 1] -> [B, 512]
+        # Flatten for attention: [B, 512, 1, 1] → [B, 512]
         x = x.view(x.size(0), -1)
 
-        # Classifier: [B, 512] -> [B, 64]
-        x = self.classifier(x)
+        # ✅ MOVED: Apply attention on 512-dim features (before classifier)
+        x = self.attention(x)  # [B, 512] → [B, 512] with attention weights
 
-        # ✅ REMOVED: x = self.attention(x)
+        # Classifier: [B, 512] → [B, 64]
+        x = self.classifier(x)
 
         return x
 ```
 
-**Repeat this for MODEL_4 and MODEL_5**
+**Key changes:**
+1. Line 38: Changed `AttentionModule(64)` → `AttentionModule(512)`
+2. Line 52: Moved `self.attention(x)` to BEFORE classifier (not after)
 
-**NOTE FOR MODEL_4:** MODEL_4 uses 2 conv layers per block. Keep that, just add SE-Attention:
+**Repeat this same change for MODEL_4 and MODEL_5**
+
+---
+
+### STEP 3: Special Instructions for MODEL_4
+
+**MODEL_4 has 2 conv layers per block** (more like true VGG). Make the same changes but keep the extra convolutions:
+
+**Changes for MODEL_4:**
+1. Change `self.attention = AttentionModule(64)` → `AttentionModule(512)`
+2. Move `self.attention(x)` to BEFORE classifier in the forward() method
+
+Everything else is the same as MODEL_3, just keep your 2 convolutions per block.
+
+---
+
+### STEP 4: Verify the Changes Work
+
+After updating all three notebooks, test that the model loads:
 
 ```python
-# For MODEL_4, the features block should be:
-self.features = nn.Sequential(
-    # Block 1 - 2 convolutions
-    nn.Conv2d(1, 64, kernel_size=3, padding=1),
-    nn.BatchNorm2d(64),
-    nn.ReLU(inplace=True),
-    nn.Conv2d(64, 64, kernel_size=3, padding=1),  # ← MODEL_4 has this extra conv
-    nn.BatchNorm2d(64),
-    nn.ReLU(inplace=True),
-    nn.MaxPool2d(kernel_size=2, stride=2),
+# Add this test cell after your model definition
+model = BimodalClassifier()
+print("Model created successfully!")
 
-    # Block 2 - 2 convolutions
-    nn.Conv2d(64, 128, kernel_size=3, padding=1),
-    nn.BatchNorm2d(128),
-    nn.ReLU(inplace=True),
-    nn.Conv2d(128, 128, kernel_size=3, padding=1),  # ← MODEL_4 has this extra conv
-    nn.BatchNorm2d(128),
-    nn.ReLU(inplace=True),
-    nn.MaxPool2d(kernel_size=2, stride=2),
+# Count parameters
+total_params = sum(p.numel() for p in model.parameters())
+trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f"Total parameters: {total_params:,}")
+print(f"Trainable parameters: {trainable_params:,}")
 
-    # Block 3 - 2 convolutions
-    nn.Conv2d(128, 256, kernel_size=3, padding=1),
-    nn.BatchNorm2d(256),
-    nn.ReLU(inplace=True),
-    nn.Conv2d(256, 256, kernel_size=3, padding=1),  # ← MODEL_4 has this extra conv
-    nn.BatchNorm2d(256),
-    nn.ReLU(inplace=True),
-    nn.MaxPool2d(kernel_size=2, stride=2),
+# Test a forward pass
+import torch
+dummy_spec = torch.randn(2, 1, 128, 1292)  # Batch of 2
+dummy_ids = torch.randint(0, 1000, (2, 512))
+dummy_mask = torch.ones(2, 512)
 
-    # Block 4 - 2 convolutions
-    nn.Conv2d(256, 512, kernel_size=3, padding=1),
-    nn.BatchNorm2d(512),
-    nn.ReLU(inplace=True),
-    nn.Conv2d(512, 512, kernel_size=3, padding=1),  # ← MODEL_4 has this extra conv
-    nn.BatchNorm2d(512),
-    nn.ReLU(inplace=True),
-
-    # ✅ SE-Attention (same for MODEL_4)
-    SEAttention(channel_dim=512, reduction_ratio=16),
-
-    nn.AdaptiveAvgPool2d((1, 1))
-)
+output = model(dummy_spec, dummy_ids, dummy_mask)
+print(f"Output shape: {output.shape}")  # Should be [2, 2] (batch, valence/arousal)
+print("✅ Model test passed!")
 ```
+
+**Expected output:**
+- Model creates without errors
+- Output shape is `[2, 2]`
+- No dimension mismatch errors
 
 ---
 
